@@ -1,5 +1,3 @@
---spaw a part
-
 local DropperTemplate = game.ServerStorage:WaitForChild('DropperTemplate')
 
 while task.wait(2) do
