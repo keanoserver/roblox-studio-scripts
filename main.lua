@@ -1,46 +1,56 @@
 local CollectionService = game:GetService("CollectionService")
-local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
-local Items = ReplicatedStorage:WaitForChild('Items')
-local Tycoons = game.Workspace:WaitForChild("Tycoons")
-local PlaceholderTycoon = ReplicatedStorage:WaitForChild('Tycoon')
+local Items = ReplicatedStorage:WaitForChild("Items")
+local Tycoons = workspace:WaitForChild("Tycoons")
+local PlaceholderTycoon = ReplicatedStorage:WaitForChild("Tycoon")
 
--- Clear out tycoon items
+-- clear out tycoon items
 for _, Tycoon in pairs(CollectionService:GetTagged("Tycoon")) do
-	if Tycoon:IsDescendantOf(ReplicatedStorage) then continue end
-	if Tycoon.Items then
+	if not Tycoon:IsDescendantOf(ReplicatedStorage) and Tycoon:FindFirstChild("Items") then
 		Tycoon.Items:ClearAllChildren()
 	else
-		warn("Tycoon has no Items folder")
+		warn("Tycoon has no Items folder or is stored in ReplicatedStorage")
 	end
 end
 
--- Function to get item in tycoon by ID
+-- find an item in the placeholder tycoon by ID
 local function getItemInTycoonById(itemId, tycoon)
-	for _, Item in PlaceholderTycoon.Items:GetChildren() do
-		if Item:GetAttribute('Id') == itemId then
+	for _, Item in tycoon.Items:GetChildren() do
+		if Item:GetAttribute("Id") == itemId then
 			return Item
 		end
 	end
-	return nil -- Return nil if no item is found
+	return nil
 end
 
--- Function to get item in general by ID
+-- find an item in the global items folder by ID
 local function getItem(itemId)
 	for _, Item in Items:GetChildren() do
 		if Item:GetAttribute("Id") == itemId then
 			return Item
 		end
 	end
-	return nil -- Return nil if item is not found
+	return nil
 end
 
--- Assigns a tycoon to the player if one is available
+-- assign a tycoon to a player
 local function assignTycoon(player)
 	for _, Tycoon in Tycoons:GetChildren() do
 		if not Tycoon:GetAttribute("Taken") then
 			Tycoon:SetAttribute("Taken", true)
 			Tycoon:SetAttribute("UserId", player.UserId)
+
+			local sign = Tycoon:FindFirstChild("Decorations"):FindFirstChild("player_sign")
+			local textLabel = sign and sign:FindFirstChild("Sign") and sign.Sign:FindFirstChild("SurfaceGui") and sign.Sign.SurfaceGui:FindFirstChild("TextLabel")
+
+			if textLabel then
+				textLabel.Text = player.Name
+			else
+				warn("Sign for Tycoon is not configured properly")
+			end
+
 			return Tycoon
 		end
 	end
@@ -48,7 +58,7 @@ local function assignTycoon(player)
 	return nil
 end
 
--- Gets the relative CFrame of an item within the placeholder tycoon
+-- get the relative CFrame of an item in the placeholder tycoon
 local function getRelativeCframe(itemId)
 	local Item = getItemInTycoonById(itemId, PlaceholderTycoon)
 	if Item and PlaceholderTycoon.PrimaryPart then
@@ -58,20 +68,40 @@ local function getRelativeCframe(itemId)
 	return nil
 end
 
--- Gets a player's assigned tycoon
+-- get a player's assigned tycoon
 local function getTycoon(player)
-	for _, tycoon in Tycoons:GetChildren() do
-		if tycoon:GetAttribute("UserId") == player.UserId then
-			return tycoon
+	for _, Tycoon in Tycoons:GetChildren() do
+		if Tycoon:GetAttribute("UserId") == player.UserId then
+			return Tycoon
 		end
 	end
 	return nil
 end
 
--- Unlocks an item for a player
+-- show buttons unlocked by a purchased item
+local function showNextButtons(tycoon, purchasedItemId)
+	for _, Button in CollectionService:GetTagged("Button") do
+		if Button:GetAttribute("RequiredItemId") == purchasedItemId and Button:IsDescendantOf(tycoon) then
+			Button.Transparency = 0
+			Button.BillboardGui.Enabled = true
+			Button.CanCollide = true
+			Button.CanTouch = true
+			Button:SetAttribute("Unlocked", false)
+
+			for _, child in pairs(Button:GetChildren()) do
+				if child:IsA("BasePart") then
+					child.CanCollide = true
+					child.CanTouch = true
+				end
+			end
+		end
+	end
+end
+
+-- unlock an item for a player
 local function unlockItem(player, itemId)
 	if not itemId then
-		warn("Attempted to unlock an item with a nil itemId.")
+		warn("Attempted to unlock an item with a nil itemId")
 		return false
 	end
 
@@ -80,90 +110,104 @@ local function unlockItem(player, itemId)
 
 	local Item = getItem(itemId)
 	if not Item then
-		warn("Item with ID " .. tostring(itemId) .. " not found in Items folder.")
+		warn("Item with ID " .. tostring(itemId) .. " not found in Items folder")
 		return false
 	end
 
-	Item = Item:Clone()
-	local Cost = Item:GetAttribute('Cost') or 0
-
-	if player.leaderstats.Cash.Value < Cost then
-		return false
-	end
+	local Cost = tonumber(Item:GetAttribute("Cost")) or 0
+	if player.leaderstats.Cash.Value < Cost then return false end
 
 	player.leaderstats.Cash.Value -= Cost
 
 	local RelativeCF = getRelativeCframe(itemId)
-	if not RelativeCF then return end
+	if not RelativeCF then return false end
 
 	local WorldCF = tycoon.PrimaryPart.CFrame:ToWorldSpace(RelativeCF)
-	Item:PivotTo(WorldCF)
-	Item.Parent = tycoon.Items
+	local ClonedItem = Item:Clone()
+	ClonedItem:PivotTo(WorldCF)
+	ClonedItem.Parent = tycoon.Items
 
+	showNextButtons(tycoon, itemId)
 	return true
 end
 
--- Button touch event
+-- button interactions
 for _, Button in CollectionService:GetTagged("Button") do
-	local ItemId = Button:GetAttribute('ItemId')
+	local ItemId = Button:GetAttribute("ItemId")
 	local Item = getItem(ItemId)
 
-	if Item and Button:FindFirstChild("BillboardGui") and Button.BillboardGui:FindFirstChild("TextLabel") then
-		Button.BillboardGui.TextLabel.Text = Item.Name .. " - " .. (Item:GetAttribute('Cost') or "N/A")
+	if Item then
+		local label = Button:FindFirstChild("BillboardGui") and Button.BillboardGui:FindFirstChild("TextLabel")
+		if label then
+			label.Text = Item.Name .. " - " .. (Item:GetAttribute("Cost") or "N/A")
+		else
+			warn("Button BillboardGui or TextLabel is missing for ItemId: " .. tostring(ItemId))
+		end
 	else
-		warn("Button or BillboardGui/TextLabel issue with ItemId: " .. tostring(ItemId))
+		warn("Button references an invalid ItemId: " .. tostring(ItemId))
 	end
 
 	Button.Touched:Connect(function(hit)
-		local itemId = Button:GetAttribute("ItemId")
-		if not itemId then
-			warn("Button missing 'ItemId' attribute.")
+		local player = Players:GetPlayerFromCharacter(hit.Parent)
+		if not player or not Button:GetAttribute("ItemId") or Button:GetAttribute("Unlocked") then return end
+
+		local tycoon = getTycoon(player)
+		if not tycoon or not Button:IsDescendantOf(tycoon) then
+			warn(player.Name .. " tried to touch a button not in their tycoon!")
 			return
 		end
 
-		if Button:GetAttribute('Unlocked') then return end
-
-		local player = game.Players:GetPlayerFromCharacter(hit.Parent)
-		if not player then return end
-
-		local tycoon = getTycoon(player)
-		if not tycoon then return end
-
-		if not Button:IsDescendantOf(tycoon) then return end
-
-		local success = unlockItem(player, itemId)
-		if not success then return end
-
-		Button.Transparency = 1
-		Button.BillboardGui.Enabled = false
-		Button:SetAttribute('Unlocked', true)
+		local success = unlockItem(player, ItemId)
+		if success then
+			Button.Transparency = 1
+			Button.BillboardGui.Enabled = false
+			Button.CanCollide = false
+			Button.CanTouch = false
+			Button:SetAttribute("Unlocked", true)
+		end
 	end)
 end
 
--- Player added event
-game.Players.PlayerAdded:Connect(function(player)
+-- player joined
+Players.PlayerAdded:Connect(function(player)
 	local Tycoon = assignTycoon(player)
-	if not Tycoon then
-		warn("Could not assign tycoon to " .. player.Name)
-		return
-	end
+	if not Tycoon then return end
 
-	local leaderstats = Instance.new("Folder")
-	leaderstats.Name = 'leaderstats'
-	leaderstats.Parent = player
+	local leaderstats = Instance.new("Folder", player)
+	leaderstats.Name = "leaderstats"
 
-	local cash = Instance.new("IntValue")
+	local cash = Instance.new("IntValue", leaderstats)
 	cash.Name = "Cash"
-	cash.Value = 500
-	cash.Parent = leaderstats
+	cash.Value = 0
+
+	-- int buttons
+	for _, Button in Tycoon.Buttons:GetChildren() do
+		Button.Transparency = 1
+		Button.BillboardGui.Enabled = false
+		Button.CanCollide = false
+		Button.CanTouch = false
+
+		if not Button:GetAttribute("RequiredItemId") then
+			Button.Transparency = 0
+			Button.BillboardGui.Enabled = true
+			Button.CanCollide = true
+			Button.CanTouch = true
+			Button:SetAttribute("Unlocked", false)
+		end
+	end
 end)
 
-game.Players.PlayerRemoving:Connect(function(player)
+-- player removal
+Players.PlayerRemoving:Connect(function(player)
 	local Tycoon = getTycoon(player)
-	Tycoon.Items:ClearAllChildren()
-	
-	for _, Button in Tycoon.Button:GetChildren() do
-		Button.Transparency = 0
-		Button.BillboardGui.Enabled = true
+	if Tycoon then
+		Tycoon.Items:ClearAllChildren()
+		for _, Button in Tycoon.Buttons:GetChildren() do
+			Button.Transparency = 0
+			Button.BillboardGui.Enabled = true
+			Button.CanCollide = true
+			Button.CanTouch = true
+			Button:SetAttribute("Unlocked", false)
+		end
 	end
 end)
