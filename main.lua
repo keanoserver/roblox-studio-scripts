@@ -6,7 +6,7 @@ local Items = ReplicatedStorage:WaitForChild("Items")
 local Tycoons = workspace:WaitForChild("Tycoons")
 local PlaceholderTycoon = ReplicatedStorage:WaitForChild("Tycoon")
 
--- clear out tycoon items
+-- Clear out tycoon items
 for _, Tycoon in pairs(CollectionService:GetTagged("Tycoon")) do
 	if not Tycoon:IsDescendantOf(ReplicatedStorage) and Tycoon:FindFirstChild("Items") then
 		Tycoon.Items:ClearAllChildren()
@@ -15,7 +15,7 @@ for _, Tycoon in pairs(CollectionService:GetTagged("Tycoon")) do
 	end
 end
 
--- find an item in the placeholder tycoon by ID
+-- Helper to find an item in the placeholder tycoon by ID
 local function getItemInTycoonById(itemId, tycoon)
 	for _, Item in tycoon.Items:GetChildren() do
 		if Item:GetAttribute("Id") == itemId then
@@ -25,7 +25,7 @@ local function getItemInTycoonById(itemId, tycoon)
 	return nil
 end
 
--- find an item in the global items folder by ID
+-- Helper to find an item in the global items folder by ID
 local function getItem(itemId)
 	for _, Item in Items:GetChildren() do
 		if Item:GetAttribute("Id") == itemId then
@@ -35,7 +35,7 @@ local function getItem(itemId)
 	return nil
 end
 
--- assign a tycoon to a player
+-- Assign a tycoon to a player
 local function assignTycoon(player)
 	for _, Tycoon in Tycoons:GetChildren() do
 		if not Tycoon:GetAttribute("Taken") then
@@ -58,7 +58,7 @@ local function assignTycoon(player)
 	return nil
 end
 
--- get the relative CFrame of an item in the placeholder tycoon
+-- Get the relative CFrame of an item in the placeholder tycoon
 local function getRelativeCframe(itemId)
 	local Item = getItemInTycoonById(itemId, PlaceholderTycoon)
 	if Item and PlaceholderTycoon.PrimaryPart then
@@ -68,7 +68,7 @@ local function getRelativeCframe(itemId)
 	return nil
 end
 
--- get a player's assigned tycoon
+-- Get a player's assigned tycoon
 local function getTycoon(player)
 	for _, Tycoon in Tycoons:GetChildren() do
 		if Tycoon:GetAttribute("UserId") == player.UserId then
@@ -78,7 +78,7 @@ local function getTycoon(player)
 	return nil
 end
 
--- show buttons unlocked by a purchased item
+-- Show buttons unlocked by a purchased item
 local function showNextButtons(tycoon, purchasedItemId)
 	for _, Button in CollectionService:GetTagged("Button") do
 		if Button:GetAttribute("RequiredItemId") == purchasedItemId and Button:IsDescendantOf(tycoon) then
@@ -88,6 +88,7 @@ local function showNextButtons(tycoon, purchasedItemId)
 			Button.CanTouch = true
 			Button:SetAttribute("Unlocked", false)
 
+			-- Ensure all parts of the button are interactive
 			for _, child in pairs(Button:GetChildren()) do
 				if child:IsA("BasePart") then
 					child.CanCollide = true
@@ -98,7 +99,7 @@ local function showNextButtons(tycoon, purchasedItemId)
 	end
 end
 
--- unlock an item for a player
+-- Unlock an item for a player
 local function unlockItem(player, itemId)
 	if not itemId then
 		warn("Attempted to unlock an item with a nil itemId")
@@ -131,7 +132,7 @@ local function unlockItem(player, itemId)
 	return true
 end
 
--- button interactions
+-- Handle button interactions
 for _, Button in CollectionService:GetTagged("Button") do
 	local ItemId = Button:GetAttribute("ItemId")
 	local Item = getItem(ItemId)
@@ -168,7 +169,7 @@ for _, Button in CollectionService:GetTagged("Button") do
 	end)
 end
 
--- player joined
+-- Handle player addition
 Players.PlayerAdded:Connect(function(player)
 	local Tycoon = assignTycoon(player)
 	if not Tycoon then return end
@@ -180,7 +181,7 @@ Players.PlayerAdded:Connect(function(player)
 	cash.Name = "Cash"
 	cash.Value = 0
 
-	-- int buttons
+	-- Initialize buttons
 	for _, Button in Tycoon.Buttons:GetChildren() do
 		Button.Transparency = 1
 		Button.BillboardGui.Enabled = false
@@ -197,7 +198,7 @@ Players.PlayerAdded:Connect(function(player)
 	end
 end)
 
--- player removal
+-- Handle player removal
 Players.PlayerRemoving:Connect(function(player)
 	local Tycoon = getTycoon(player)
 	if Tycoon then
