@@ -1,10 +1,10 @@
 local lava = script.Parent
 
 lava.Touched:Connect(function(hit)
-	local character = hit.Parent
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-	if humanoid then
-		humanoid.Health = 0
-	end
+	local char = hit.Parent --char = character
+	local hum = char:FindFirstChild("Humanoid") --hum = humanoid
+	
+	if hum then 
+		hum.Health = 0 
+	end 
 end)
